@@ -6,14 +6,18 @@ There were a few of basic designs I tested with.  The hardware was a supermicro 
 Here is a general list of stuff I did to maximize the performance I learned a lot about what things made the most differences.  I also worked extensively with the engineers at LSI to optimize things.
 
 ## Hardware.
-- PCI slots.  
+### PCI slots
 Its not stated anywhere in the documentation but faster is not always better.  Working directly with the LSI engineers I learned that for the greatest speed and stability you should be using an 8x pci slot for the raid card.  Also you want to make sure that your infiniband cards are registering at the right speeds on the PCI bus.  You'll want to use 'lspci' with lots of verbosity to verify that the pci cards come up at the right speeds.  I had some driver and BIOS issues that caused some infiniband cards to only come up at half speed or 2.5gb/s vs 5.0gb/s
 
 ### Bios updates
-For the head nodes I was using INTEL chassis with Intel chipsets.  These were very buggy and needed to be constantly updated as Intel was fixing things in the BIOS which caused great instability. Make sure all the BIOS is latest and greatest.  Supermicro's firmware's seemed much more stable in comparison. 
+For the head nodes I was using INTEL chassis with Intel chipsets. These were very buggy and needed to be constantly updated as Intel was fixing things in the BIOS which caused great instability. Make sure all the BIOS is latest and greatest.  Supermicro's firmware's seemed much more stable in comparison. 
 
 ## Protocols.
-This is a very interesting topic.  In a nutshell this was probably the biggest benefit.  Originally I had been using Ethernet over infiniband  or IPoIB which gave me very fast speeds compared to 1gb networking but no where near the speeds I would expect to see from a raid10 SSD array via 20gb infiniband.  Using IPoIB also bogged down cpu's so wasn't ideal in my situation.  So the magic really starts when you use iscsi + iser + RDMA.
+This is a very interesting topic.  In a nutshell this was probably the biggest benefit.   
+
+Originally I had been using Ethernet over infiniband or IPoIB which gave me very fast speeds compared to 1gb networking but nowhere near the speeds I would expect to see from a raid10 SSD array via 20gb infiniband. Using IPoIB also bogged down cpu's so wasn't ideal in my situation.   
+
+So the magic really starts when you use iscsi + iser + RDMA.
 
 You still need IP based communication to do the target discovery but once the nodes all know about each other they switch to using RDMA which is way more efficient.   This requires using a iscsi target software that supports iser as well as compiling the drivers for your current kernel from the Mellanox or OFED package of your choice. 
 
@@ -41,7 +45,7 @@ This was a very helpful guide on the tuning recommendations I followed.
 
 ### Openib.conf
 
-	This file allowed me to enable and disable certain drivers.  Specifically I wanted to enable the iser as well as IPoIB
+This file allowed me to enable and disable certain drivers.  Specifically I wanted to enable the iser as well as IPoIB
 
 
 ### Sysctl.conf
@@ -49,6 +53,7 @@ This was a very helpful guide on the tuning recommendations I followed.
 The settings in sysctl.conf made significant improvements on performance.
 	
 Network settings
+
 ```
 net.ipv4.tcp_timestamps=0
 net.ipv4.tcp_sack=0
@@ -67,7 +72,8 @@ net.core.netdev_max_backlog=250000
 
 ### Virtual memory settings
 
-Of the sysctl settings these defintily make a huge difference.  Depending on the workloads of the guest machines these settings could be tweaked per your environment.  I noticed significant differences in performance based on different types of workloads.  YMMV
+Of the sysctl settings these defintily make a huge difference. Depending on the workloads of the guest machines these settings could be tweaked per your environment. I noticed significant differences in performance based on different types of workloads.  YMMV
+
 
 ```
 vm.swappiness=0
@@ -75,6 +81,7 @@ vm.zone_reclaim_mode=0
 vm.dirty_ratio=10
 vm.dirty_background_ratio=5
 ```
+
 	
 ## IRQ affinity
 
@@ -85,8 +92,8 @@ vm.dirty_background_ratio=5
 	
 ### Unbalanced
 	
-	```
-	[root@demo mnt]# cat /proc/interrupts |grep megasas
+```
+[root@demo mnt]# cat /proc/interrupts |grep megasas
 	  80:       2506          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  81:        124          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  82:         24          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
@@ -95,12 +102,12 @@ vm.dirty_background_ratio=5
 	  85:         80          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  86:         17          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  87:          8          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
-	```
+```
 
 ### Balanced
 
-	```
-	$ cat /proc/interrupts |grep mega
+```
+$ cat /proc/interrupts |grep mega
 	  80:     650586          0          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  81:     242572      87388          0          0          0          0          0          0  IR-PCI-MSI-edge      megasas
 	  82:     240192          0     247210          0          0          0          0          0  IR-PCI-MSI-edge      megasas
@@ -109,15 +116,15 @@ vm.dirty_background_ratio=5
 	  85:     113659          0          0          0          0      58953          0          0  IR-PCI-MSI-edge      megasas
 	  86:      33822          0          0          0          0          0      37659          0  IR-PCI-MSI-edge      megasas
 	  87:      28633          0          0          0          0          0          0      35605  IR-PCI-MSI-edge      megasas
-	```
+```
 	
-	Some additional reading on interuppt spreading.
+Some additional reading on interuppt spreading.
 	
-	[LSI helpdesk on smp affinity](http://mycusthelp.info/LSI/_cs/AnswerDetail.aspx?sSessionID=2094971131CRRKKVQBLHOQVMGXAIOEYJYLYNWQIB&inc=8273&caller=~%2fFindAnswers.aspx%3ftxtCriteria%3dssd%26sSessionid%3d2094971131CRRKKVQBLHOQVMGXAIOEYJYLYNWQIB)
+[LSI helpdesk on smp affinity](http://mycusthelp.info/LSI/_cs/AnswerDetail.aspx?sSessionID=2094971131CRRKKVQBLHOQVMGXAIOEYJYLYNWQIB&inc=8273&caller=~%2fFindAnswers.aspx%3ftxtCriteria%3dssd%26sSessionid%3d2094971131CRRKKVQBLHOQVMGXAIOEYJYLYNWQIB)
 	
-	[msi-x-the-right-way-to-spread-interrupt-load](http://www.alexonlinux.com/msi-x-the-right-way-to-spread-interrupt-load)
+[msi-x-the-right-way-to-spread-interrupt-load](http://www.alexonlinux.com/msi-x-the-right-way-to-spread-interrupt-load)
 	
-	[smp-affinity-and-proper-interrupt-handling-in-linux](http://www.alexonlinux.com/smp-affinity-and-proper-interrupt-handling-in-linux)
+[smp-affinity-and-proper-interrupt-handling-in-linux](http://www.alexonlinux.com/smp-affinity-and-proper-interrupt-handling-in-linux)
 	
 	
 ## CPU frequency/speed.
